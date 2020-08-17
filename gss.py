@@ -27,7 +27,17 @@ class GamePiece:
         self.color = color
         self.checkRotated = checkRotated
         self.checkFlipped = checkFlipped
-        self.mask = np.array(mask)
+        self.mask = []
+
+        flips = [0, 1] if checkFlipped else [0]
+        rotations = [0, 1, 2, 3] if checkRotated else [0]
+
+        for flip in flips:
+            for rotation in rotations:
+                new_mask = np.array(mask)
+                new_mask = np.fliplr(new_mask) if flip else new_mask
+                new_mask = np.rot90(new_mask, rotation)
+                self.mask.append(new_mask)
 
 
 class Dice:
@@ -95,40 +105,26 @@ class Board:
         solved = (empty_spaces.size == 0)
         return solved
 
-    def pieceFitsAtSpace(self, piece, row, col):
-        flipList = [0,1] if piece.checkFlipped else [0]
-        rotateList = [0,1,2,3] if piece.checkRotated else [0]
+    def piece_fits_at_space(self, row, col, piece):
+        for mask_index, piece_mask in enumerate(piece.mask):
+            pieceRows, pieceCols = piece_mask.shape
 
-        for flip in flipList:
-            for rotation in rotateList:
-                pieceRows, pieceCols = piece.mask.shape
+            boardSlice = self.space[row:row+pieceRows, col:col+pieceCols]
+            if boardSlice.shape != piece_mask.shape:
+                continue # this shape & orientation extends past the board edges, skip
 
-                if rotation % 2 != 0: # for odd rotations, swap row & col sizes
-                    pieceRows, pieceCols = pieceCols, pieceRows
-
-                boardSlice = self.space[row:row+pieceRows, col:col+pieceCols]
-                pieceSlice = np.fliplr(piece.mask) if flip else piece.mask
-                pieceSlice = np.rot90(pieceSlice, rotation)
-                if boardSlice.shape != pieceSlice.shape:
-                    continue # this shape & orientation extends past the board edges, skip
-
-                boardSliceMask = (boardSlice == 0) # array of booleans where True is an empty space
-                if np.array_equal(boardSliceMask & pieceSlice, pieceSlice):
-                    # intersection of empty spaces & piece shape results in the piece shape, it means we can fit it in!
-                    return (rotation, flip)
+            boardSliceMask = (boardSlice == 0) # array of booleans where True is an empty space
+            if np.array_equal(boardSliceMask & piece_mask, piece_mask):
+                # intersection of empty spaces & piece shape results in the piece shape, it means we can fit it in!
+                return mask_index
         return None # does not fit
 
-    def placePiece(self, piece, row, col, orientation):
-        pieceRows, pieceCols = piece.mask.shape
-        if orientation[0] % 2 != 0: # for odd rotations, swap row & col sizes
-            pieceRows, pieceCols = pieceCols, pieceRows
-
-        boardSlice = self.space[row:row+pieceRows, col:col+pieceCols]
-        pieceSlice = np.fliplr(piece.mask) if orientation[1] else piece.mask
-        pieceSlice = np.rot90(pieceSlice, orientation[0])
-
-        addSlice = pieceSlice * piece.uid
-        boardSlice[:] += addSlice # we want to replace the range, not update reference to point to addSlice
+    def place_piece(self, row, col, piece, orientation=0):
+        piece_mask = piece.mask[orientation]
+        piece_rows, piece_cols = piece_mask.shape
+        board_slice = self.space[row:row+piece_rows, col:col+piece_cols]
+        add_slice = piece_mask * piece.uid
+        board_slice[:] += add_slice # we want to replace the range, not update reference to point to addSlice
 
 
 
@@ -166,7 +162,7 @@ for d in DEFAULT_DICE:
     dice = Dice(d)
     face, (row, col) = dice.roll()
     dice_result_output += face + ' '
-    theBoard.placePiece(all_pieces[0], row, col, (0, 0))  # place the blocker pieces
+    theBoard.place_piece(row, col, all_pieces[0])  # place the blocker pieces
 print(dice_result_output + '\n')
 
 
@@ -174,11 +170,11 @@ def recursiveSolve(board, remaining, stopAtFirstSolution = False):
     piece = remaining[0]
     for row in range(6):
         for col in range(6): 
-            orientation = board.pieceFitsAtSpace(piece, row, col)
+            orientation = board.piece_fits_at_space(row, col, piece)
             if orientation != None:
                 newBoard = Board(board)
                 newBoard.depth = board.depth + 1
-                newBoard.placePiece(piece, row, col, orientation)
+                newBoard.place_piece(row, col, piece, orientation)
                 newRemaining = remaining.copy()
                 newRemaining.remove(piece)
 
