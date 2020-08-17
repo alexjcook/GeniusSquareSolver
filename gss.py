@@ -5,9 +5,10 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 ROW_LABELS = list('ABCDEF')
-COL_LABELS = list(map(str,range(1, 7)))
-DEFAULT_DICE =[
+COL_LABELS = list(map(str, range(1, 7)))
+DEFAULT_DICE = [
     'A1 F3 D1 E2 D2 C1',
     'A2 A3 B1 B2 C2 B3',
     'A4 B5 C5 C6 F6 D6',
@@ -16,12 +17,14 @@ DEFAULT_DICE =[
     'B4 C3 C4 D3 E3 D4',
     'D5 E4 E5 E6 F4 F5'
 ]
+SOLUTION_LIMIT = 1  # stop after finding this many solutions
 
 
 class GamePiece:
 
     def __init__(self, name, uid, color,
                  checkRotated, checkFlipped, mask):
+
         self.name = name
         self.uid = uid
         self.color = color
@@ -33,10 +36,12 @@ class GamePiece:
 class Dice:
 
     def __init__(self, faces):
+
         faces_as_list = faces.split(' ')
         self.faces = faces_as_list
 
     def roll(self):
+
         random_face_index = random.randrange(len(self.faces))
         face = self.faces[random_face_index]
         row = ROW_LABELS.index(face[0])
@@ -46,47 +51,44 @@ class Dice:
 
 class Board:
 
-    def __init__(self, fromExistingBoard=None):
-
-        self.depth = 0
-        if fromExistingBoard is None:
+    def __init__(self, from_existing_board=None):
+        
+        if from_existing_board is None:
             self.space = np.zeros((6, 6), np.int8)
+            self.depth = 0
         else:
-            self.space = fromExistingBoard.space.copy()
+            self.space = from_existing_board.space.copy()
+            self.depth = from_existing_board.depth + 1
 
     def draw(self):
 
-        data_with_color = np.ones((6, 6, 3))
+        color_data = np.ones((6, 6, 3))
         fig, ax = plt.subplots()
 
-        for rowIndex, row in enumerate(self.space):
-            for colIndex, col in enumerate(row):
-                if col == 99: # blocker piece
+        for row, row_val in enumerate(self.space):
+            for col, col_val in enumerate(row_val):
+                if col_val == 99:  # blocker piece
                     color = all_pieces[0].color
-                    circ = plt.Circle((colIndex, rowIndex), radius=0.45, color=color)
+                    circ = plt.Circle((col, row), radius=0.45, color=color)
                     ax.add_patch(circ)
-                elif col > 0:
-                    data_with_color[rowIndex, colIndex] = piece_colors.get(col, [0, 0, 0])
+                elif col_val > 0:
+                    color_data[row, col] = piece_colors.get(col_val, [0, 0, 0])
 
-        ax.imshow(data_with_color)
+        ax.imshow(color_data)
         ax.xaxis.tick_top()
         ax.set_xticks(np.arange(6))
         ax.set_yticks(np.arange(6))
-
         ax.set_xticklabels(COL_LABELS)
         ax.set_yticklabels(ROW_LABELS)
-
         plt.draw()
-        plt.pause(0.001)
-        # show plot and allow processing to continue
+        plt.pause(0.001)  # show plot and allow processing to continue
 
     def drawToConsole(self):
         output = "    "
         output += "  ".join(COL_LABELS) + "\n"
-        for rowIndex, row in enumerate(self.space):
-            output += ROW_LABELS[rowIndex] + " "
-            for colIndex, col in enumerate(row):
-                output += str(col).rjust(3)
+        for row_index, row in enumerate(self.space):
+            output += ROW_LABELS[row_index] + " "
+            output += ''.join([str(col).rjust(3) for col in row])
             output += '\n'
         print(output)
 
@@ -118,7 +120,7 @@ class Board:
                     return (rotation, flip)
         return None # does not fit
 
-    def placePiece(self, piece, row, col, orientation):
+    def placePiece(self, piece, row, col, orientation=(0, 0)):
         pieceRows, pieceCols = piece.mask.shape
         if orientation[0] % 2 != 0: # for odd rotations, swap row & col sizes
             pieceRows, pieceCols = pieceCols, pieceRows
@@ -157,27 +159,25 @@ play_pieces = all_pieces[1:]  # all pieces except the Blocker are available to p
 
 theBoard = Board()
 
+
+# Roll each dice and place a blocker piece on the board
 print("Rolling dice...")
-
-
-# initialise and roll a dice, then place the blocker piece on the board
 dice_result_output = ' '
 for d in DEFAULT_DICE:
     dice = Dice(d)
     face, (row, col) = dice.roll()
     dice_result_output += face + ' '
-    theBoard.placePiece(all_pieces[0], row, col, (0, 0))  # place the blocker pieces
+    theBoard.placePiece(all_pieces[0], row, col)  # place the blocker piece
 print(dice_result_output + '\n')
 
 
-def recursiveSolve(board, remaining, stopAtFirstSolution = False):
+def recursiveSolve(board, remaining, limit = 1):
     piece = remaining[0]
     for row in range(6):
         for col in range(6): 
             orientation = board.pieceFitsAtSpace(piece, row, col)
             if orientation != None:
                 newBoard = Board(board)
-                newBoard.depth = board.depth + 1
                 newBoard.placePiece(piece, row, col, orientation)
                 newRemaining = remaining.copy()
                 newRemaining.remove(piece)
@@ -187,15 +187,14 @@ def recursiveSolve(board, remaining, stopAtFirstSolution = False):
                     nSolutions += 1
                     print('Found a solution in {:.2f} seconds'.format(time.process_time() - start_time))
                     newBoard.drawToConsole()
-                    
                     newBoard.draw()
-                    return stopAtFirstSolution
+                    return (nSolutions >= limit)
 
-                if not newRemaining: # no remaining pieces, jump back up a recursion level
-                    return False
+                if not newRemaining:  # No remaining pieces we can place!
+                    return False      # Jump back to shallower recursion depth
 
-                solutionFound = recursiveSolve(newBoard, newRemaining, stopAtFirstSolution)
-                if solutionFound and stopAtFirstSolution:
+                solutionFound = recursiveSolve(newBoard, newRemaining, limit)
+                if solutionFound and (nSolutions >= limit):
                     return True #exit out of the recursion
     return False # cannot solve at this depth
 
@@ -208,6 +207,6 @@ print(', '.join([x.name for x in play_pieces]) + '\n')
 print('Solving...')
 start_time = time.process_time()
 nSolutions = 0
-recursiveSolve(theBoard, play_pieces, stopAtFirstSolution = True)
+recursiveSolve(theBoard, play_pieces, SOLUTION_LIMIT)
 print('Found {} solutions in {:.2f} seconds'.format(nSolutions, time.process_time() - start_time))
 plt.show() #keeps program running until the plot is closed
