@@ -7,6 +7,15 @@ import matplotlib.pyplot as plt
 
 ROW_LABELS = list('ABCDEF')
 COL_LABELS = list(map(str,range(1, 7)))
+DEFAULT_DICE =[
+    'A1 F3 D1 E2 D2 C1',
+    'A2 A3 B1 B2 C2 B3',
+    'A4 B5 C5 C6 F6 D6',
+    'A5 F2 A5 F2 E1 B6',
+    'A6 F1 A6 F1 A6 F1',
+    'B4 C3 C4 D3 E3 D4',
+    'D5 E4 E5 E6 F4 F5'
+]
 
 
 class GamePiece:
@@ -23,8 +32,9 @@ class GamePiece:
 
 class Dice:
 
-    def __init__(self, face_list):
-        self.faces = face_list
+    def __init__(self, faces):
+        faces_as_list = faces.split(' ')
+        self.faces = faces_as_list
 
     def roll(self):
         random_face_index = random.randrange(len(self.faces))
@@ -120,15 +130,8 @@ class Board:
         addSlice = pieceSlice * piece.uid
         boardSlice[:] += addSlice # we want to replace the range, not update reference to point to addSlice
 
-        
-d = []
-d.append(Dice(['A1','F3','D1','E2','D2','C1']))
-d.append(Dice(['A2','A3','B1','B2','C2','B3']))
-d.append(Dice(['A4','B5','C5','C6','F6','D6']))
-d.append(Dice(['A5','F2','A5','F2','E1','B6']))
-d.append(Dice(['A6','F1','A6','F1','A6','F1']))
-d.append(Dice(['B4','C3','C4','D3','E3','D4']))
-d.append(Dice(['D5','E4','E5','E6','F4','F5']))
+
+
 
 all_pieces = []
 all_pieces.append(GamePiece('Blocker', 99, [0.6, 0.4, 0.05], False, False, [[True]]))
@@ -150,18 +153,21 @@ piece_colors = {x.uid: x.color for x in all_pieces}
 
 play_pieces = all_pieces[1:]  # all pieces except the Blocker are available to play
 
-strategicSort = [4, 5, 6, 7, 8, 9, 3, 2, 1]
+
 
 theBoard = Board()
 
 print("Rolling dice...")
-diceResult = ' '
-for i in range(len(d)):  # iterate dice list and roll each one
-    face, (row, col) = d[i].roll()
-    diceResult += face + ' '
+
+
+# initialise and roll a dice, then place the blocker piece on the board
+dice_result_output = ' '
+for d in DEFAULT_DICE:
+    dice = Dice(d)
+    face, (row, col) = dice.roll()
+    dice_result_output += face + ' '
     theBoard.placePiece(all_pieces[0], row, col, (0, 0))  # place the blocker pieces
-diceResult += '\n'
-print(diceResult)
+print(dice_result_output + '\n')
 
 
 def recursiveSolve(board, remaining, stopAtFirstSolution = False):
@@ -194,9 +200,11 @@ def recursiveSolve(board, remaining, stopAtFirstSolution = False):
     return False # cannot solve at this depth
 
 
-play_pieces.sort(key=lambda x: strategicSort.index(x.uid))
-print('Using following stategy')
-print([x.name for x in play_pieces])
+print('Using following stategy:')
+strategic_sort = [4, 5, 6, 7, 8, 9, 3, 2, 1]  # Grey, Red, Yellow, Cyan, Green, Purple, Orange, Brown, Blue
+play_pieces.sort(key=lambda x: strategic_sort.index(x.uid))
+print(', '.join([x.name for x in play_pieces]) + '\n')
+
 print('Solving...')
 start_time = time.process_time()
 nSolutions = 0
