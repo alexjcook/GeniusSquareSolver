@@ -132,6 +132,33 @@ class Board:
         addSlice = pieceSlice * piece.uid
         boardSlice[:] += addSlice # we want to replace the range, not update reference to point to addSlice
 
+    def recursiveSolve(self, remaining, limit = 1):
+        piece = remaining[0]
+        for row in range(6):
+            for col in range(6): 
+                orientation = self.pieceFitsAtSpace(piece, row, col)
+                if orientation != None:
+                    newBoard = Board(self)
+                    newBoard.placePiece(piece, row, col, orientation)
+                    newRemaining = remaining.copy()
+                    newRemaining.remove(piece)
+
+                    if newBoard.isSolved():
+                        global nSolutions, start_time
+                        nSolutions += 1
+                        print('Found a solution in {:.2f} seconds'.format(time.process_time() - start_time))
+                        newBoard.drawToConsole()
+                        newBoard.draw()
+                        return (nSolutions >= limit)
+
+                    if not newRemaining:  # No remaining pieces we can place!
+                        return False      # Jump back to shallower recursion depth
+
+                    solutionFound = newBoard.recursiveSolve(newRemaining, limit)
+                    if solutionFound and (nSolutions >= limit):
+                        return True #exit out of the recursion
+        return False # cannot solve at this depth
+
 
 
 
@@ -155,10 +182,7 @@ piece_colors = {x.uid: x.color for x in all_pieces}
 
 play_pieces = all_pieces[1:]  # all pieces except the Blocker are available to play
 
-
-
 theBoard = Board()
-
 
 # Roll each dice and place a blocker piece on the board
 print("Rolling dice...")
@@ -170,35 +194,6 @@ for d in DEFAULT_DICE:
     theBoard.placePiece(all_pieces[0], row, col)  # place the blocker piece
 print(dice_result_output + '\n')
 
-
-def recursiveSolve(board, remaining, limit = 1):
-    piece = remaining[0]
-    for row in range(6):
-        for col in range(6): 
-            orientation = board.pieceFitsAtSpace(piece, row, col)
-            if orientation != None:
-                newBoard = Board(board)
-                newBoard.placePiece(piece, row, col, orientation)
-                newRemaining = remaining.copy()
-                newRemaining.remove(piece)
-
-                if newBoard.isSolved():
-                    global nSolutions, start_time
-                    nSolutions += 1
-                    print('Found a solution in {:.2f} seconds'.format(time.process_time() - start_time))
-                    newBoard.drawToConsole()
-                    newBoard.draw()
-                    return (nSolutions >= limit)
-
-                if not newRemaining:  # No remaining pieces we can place!
-                    return False      # Jump back to shallower recursion depth
-
-                solutionFound = recursiveSolve(newBoard, newRemaining, limit)
-                if solutionFound and (nSolutions >= limit):
-                    return True #exit out of the recursion
-    return False # cannot solve at this depth
-
-
 print('Using following stategy:')
 strategic_sort = [4, 5, 6, 7, 8, 9, 3, 2, 1]  # Grey, Red, Yellow, Cyan, Green, Purple, Orange, Brown, Blue
 play_pieces.sort(key=lambda x: strategic_sort.index(x.uid))
@@ -207,6 +202,6 @@ print(', '.join([x.name for x in play_pieces]) + '\n')
 print('Solving...')
 start_time = time.process_time()
 nSolutions = 0
-recursiveSolve(theBoard, play_pieces, SOLUTION_LIMIT)
+theBoard.recursiveSolve(play_pieces, SOLUTION_LIMIT)
 print('Found {} solutions in {:.2f} seconds'.format(nSolutions, time.process_time() - start_time))
 plt.show() #keeps program running until the plot is closed
