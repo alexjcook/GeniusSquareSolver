@@ -6,6 +6,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+SOLUTION_LIMIT = 2  # stop after finding this many solutions
+PLOT_SOLUTIONS = True
 ROW_LABELS = list('ABCDEF')
 COL_LABELS = list(map(str, range(1, 7)))
 DEFAULT_DICE = [
@@ -17,7 +19,8 @@ DEFAULT_DICE = [
     'B4 C3 C4 D3 E3 D4',
     'D5 E4 E5 E6 F4 F5'
 ]
-SOLUTION_LIMIT = 1  # stop after finding this many solutions
+
+
 
 
 class GamePiece:
@@ -61,8 +64,8 @@ class Dice:
 
 class Board:
 
-    def __init__(self, from_existing_board=None):
-        
+    def __init__(self, game_context, from_existing_board=None):
+        self.game_context = game_context
         if from_existing_board is None:
             self.space = np.zeros((6, 6), np.int8)
             self.depth = 0
@@ -78,11 +81,11 @@ class Board:
         for row, row_val in enumerate(self.space):
             for col, col_val in enumerate(row_val):
                 if col_val == 99:  # blocker piece
-                    color = all_pieces[0].color
+                    color = self.game_context.all_pieces[0].color
                     circ = plt.Circle((col, row), radius=0.45, color=color)
                     ax.add_patch(circ)
                 elif col_val > 0:
-                    color_data[row, col] = piece_colors.get(col_val, [0, 0, 0])
+                    color_data[row, col] = self.game_context.piece_colors.get(col_val, [0, 0, 0])
 
         ax.imshow(color_data)
         ax.xaxis.tick_top()
@@ -135,70 +138,93 @@ class Board:
             for col in range(6): 
                 orientation = self.piece_fits_at_space(row, col, piece)
                 if orientation != None:
-                    newBoard = Board(self)
+                    newBoard = Board(self.game_context, self)
                     newBoard.place_piece(row, col, piece, orientation)
                     newRemaining = remaining.copy()
                     newRemaining.remove(piece)
 
                     if newBoard.isSolved():
-                        global nSolutions, start_time
-                        nSolutions += 1
-                        print('Found a solution in {:.2f} seconds'.format(time.process_time() - start_time))
+                        
+                        self.game_context.nbr_solutions_found += 1
+                        print('Found a solution in {:.2f} seconds'.format(time.process_time() - self.game_context.start_time))
                         newBoard.drawToConsole()
-                        newBoard.draw()
-                        return (nSolutions >= limit)
+                        if PLOT_SOLUTIONS:
+                            newBoard.draw()
+                        return (self.game_context.nbr_solutions_found >= limit)
 
                     if not newRemaining:  # No remaining pieces we can place!
                         return False      # Jump back to shallower recursion depth
 
                     solutionFound = newBoard.recursiveSolve(newRemaining, limit)
-                    if solutionFound and (nSolutions >= limit):
+                    if solutionFound and (self.game_context.nbr_solutions_found >= limit):
                         return True #exit out of the recursion
         return False # cannot solve at this depth
 
+class GameContext:
+
+    def __init__(self):
+        self.nbr_solutions_found = 0
+        self.start_time = time.process_time()  # Note: will be overridden during Solve()
+
+        self.all_pieces = []
+        self.all_pieces.append(GamePiece('Blocker', 99, [0.6, 0.4, 0.05], False, False, [[True]]))
+        self.all_pieces.append(GamePiece('Blue', 1, [0,0,1.0], False, False, [[True]]))
+        self.all_pieces.append(GamePiece('Brown', 2, [0.5,0.3,0.3], True, False, [[True, True]]))
+        self.all_pieces.append(GamePiece('Orange', 3, [1.0,0.4,0], True, False, [[True, True, True]]))
+        self.all_pieces.append(GamePiece('Grey', 4, [0.5,0.5,0.5], True, False, [[True, True, True, True]]))
+        self.all_pieces.append(GamePiece('Red', 5, [1.0,0,0], True, True, [[False, True, True],
+                                                                [True, True, False]]))
+        self.all_pieces.append(GamePiece('Yellow', 6, [1.0,0.7,0], True, False,[[True, True, True],
+                                                                    [False, True, False]]))
+        self.all_pieces.append(GamePiece('Cyan', 7, [0.2,0.5,1.0], True, True, [[True, True, True],
+                                                                    [True, False, False]]))
+        self.all_pieces.append(GamePiece('Green', 8, [0,1.0,0], False, False, [[True, True],
+                                                                    [True, True]]))
+        self.all_pieces.append(GamePiece('Purple', 9, [0.5,0,0.5], True, False, [[True, True],
+                                                                        [True, False]]))
+        self.piece_colors = {x.uid: x.color for x in self.all_pieces}
+
+        self.play_pieces = self.all_pieces[1:]  # all pieces except the Blocker are available to play
+        
+        self.board = Board(self)
 
 
+    def roll_dice(self):
+        # Roll each dice and place a blocker piece on the board
+        print("Rolling dice...")
+        dice_result_output = ' '
+        for d in DEFAULT_DICE:
+            dice = Dice(d)
+            face, (row, col) = dice.roll()
+            dice_result_output += face + ' '
+            self.board.place_piece(row, col, self.all_pieces[0])  # place the blocker pieces
+        print(dice_result_output + '\n')
 
-all_pieces = []
-all_pieces.append(GamePiece('Blocker', 99, [0.6, 0.4, 0.05], False, False, [[True]]))
-all_pieces.append(GamePiece('Blue', 1, [0,0,1.0], False, False, [[True]]))
-all_pieces.append(GamePiece('Brown', 2, [0.5,0.3,0.3], True, False, [[True, True]]))
-all_pieces.append(GamePiece('Orange', 3, [1.0,0.4,0], True, False, [[True, True, True]]))
-all_pieces.append(GamePiece('Grey', 4, [0.5,0.5,0.5], True, False, [[True, True, True, True]]))
-all_pieces.append(GamePiece('Red', 5, [1.0,0,0], True, True, [[False, True, True],
-                                                        [True, True, False]]))
-all_pieces.append(GamePiece('Yellow', 6, [1.0,0.7,0], True, False,[[True, True, True],
-                                                            [False, True, False]]))
-all_pieces.append(GamePiece('Cyan', 7, [0.2,0.5,1.0], True, True, [[True, True, True],
-                                                            [True, False, False]]))
-all_pieces.append(GamePiece('Green', 8, [0,1.0,0], False, False, [[True, True],
-                                                            [True, True]]))
-all_pieces.append(GamePiece('Purple', 9, [0.5,0,0.5], True, False, [[True, True],
-                                                                [True, False]]))
-piece_colors = {x.uid: x.color for x in all_pieces}
+    def solve(self, limit):
+        self.start_time = time.process_time()
+        self.board.recursiveSolve(self.play_pieces, limit)
+        if limit > 1:
+            print('Found a total of {} solutions in {:.2f} seconds'.format(
+                self.nbr_solutions_found, time.process_time() - self.start_time))
+        if PLOT_SOLUTIONS:
+            plt.show() #keeps program running until the plot is closed
 
-play_pieces = all_pieces[1:]  # all pieces except the Blocker are available to play
 
-theBoard = Board()
+def main():
 
-# Roll each dice and place a blocker piece on the board
-print("Rolling dice...")
-dice_result_output = ' '
-for d in DEFAULT_DICE:
-    dice = Dice(d)
-    face, (row, col) = dice.roll()
-    dice_result_output += face + ' '
-    theBoard.place_piece(row, col, all_pieces[0])  # place the blocker pieces
-print(dice_result_output + '\n')
+    game = GameContext()
+    game.roll_dice()
+    game.board.drawToConsole()
 
-print('Using following stategy:')
-strategic_sort = [4, 5, 6, 7, 8, 9, 3, 2, 1]  # Grey, Red, Yellow, Cyan, Green, Purple, Orange, Brown, Blue
-play_pieces.sort(key=lambda x: strategic_sort.index(x.uid))
-print(', '.join([x.name for x in play_pieces]) + '\n')
+    print('Using following stategy:')
+    strategic_sort = [4, 5, 6, 7, 8, 9, 3, 2, 1]  # Grey, Red, Yellow, Cyan, Green, Purple, Orange, Brown, Blue
+    game.play_pieces.sort(key=lambda x: strategic_sort.index(x.uid))
+    print(', '.join([x.name for x in game.play_pieces]) + '\n')
 
-print('Solving...')
-start_time = time.process_time()
-nSolutions = 0
-theBoard.recursiveSolve(play_pieces, SOLUTION_LIMIT)
-print('Found {} solutions in {:.2f} seconds'.format(nSolutions, time.process_time() - start_time))
-plt.show() #keeps program running until the plot is closed
+    print('Solving...')
+    game.solve(SOLUTION_LIMIT)
+    
+
+
+if __name__ == "__main__": 
+    main() 
