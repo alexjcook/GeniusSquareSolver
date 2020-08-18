@@ -5,6 +5,7 @@ Finds solutions to the board game _The Genius Square_.
 
 ## What is The Genius Square?
 The Genius Square is a fun puzzle game, you should buy a copy!
+
 ![Image of The Genius Square board game](https://www.happypuzzle.co.uk/uploads/productimages/medium/GENIUS.jpg)
 
 ## How is it played?
