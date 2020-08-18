@@ -21,22 +21,18 @@ DEFAULT_DICE = [
 ]
 
 
-
-
 class GamePiece:
 
     def __init__(self, name, uid, color,
-                 checkRotated, checkFlipped, mask):
+                 check_rotated, check_flipped, mask):
 
         self.name = name
         self.uid = uid
         self.color = color
-        self.checkRotated = checkRotated
-        self.checkFlipped = checkFlipped
         self.mask = []
 
-        flips = [0, 1] if checkFlipped else [0]
-        rotations = [0, 1, 2, 3] if checkRotated else [0]
+        flips = [0, 1] if check_flipped else [0]
+        rotations = [0, 1, 2, 3] if check_rotated else [0]
 
         for flip in flips:
             for rotation in rotations:
@@ -75,13 +71,9 @@ class Board:
 
     def draw(self):
 
-        fig = self.context.plot_fig
+        # update board image
         ax_sq = self.context.plot_ax[0]
-        ax_ln = self.context.plot_ax[1]
-
         color_data = np.ones((6, 6, 3))
-        
-
         for row, row_val in enumerate(self.space):
             for col, col_val in enumerate(row_val):
                 if col_val == 99:  # blocker piece
@@ -89,16 +81,16 @@ class Board:
                     circ = plt.Circle((col, row), radius=0.45, color=color)
                     ax_sq.add_patch(circ)
                 elif col_val > 0:
-                    color_data[row, col] = self.context.piece_colors.get(col_val, [0, 0, 0])
-
+                    color = self.context.piece_colors.get(col_val, [0, 0, 0])
+                    color_data[row, col] = color
         ax_sq.imshow(color_data)
 
+        # update line plot
         x = [0] + self.context.solution_ts
-        y = range(len(self.context.solution_ts)+1)
-        self.context.plot_ln.set_xdata(x)
-        self.context.plot_ln.set_ydata(y)
-        ax_ln.set_xlim([0, max(10, time.process_time())])
-        ax_ln.set_ylim([0, SOLUTION_LIMIT + 1])
+        y = range(len(self.context.solution_ts) + 1)
+        self.context.plot_ln.set_data(x, y)
+        self.context.plot_ax[1].set_xlim([0, max(10, time.process_time())])
+        self.context.plot_ax[1].set_ylim([0, SOLUTION_LIMIT + 1])
         plt.pause(0.001)  # show plot and allow processing to continue
 
     def drawToConsole(self):
@@ -117,61 +109,66 @@ class Board:
 
     def piece_fits_at_space(self, row, col, piece):
         for mask_index, piece_mask in enumerate(piece.mask):
-            pieceRows, pieceCols = piece_mask.shape
+            piece_rows, piece_cols = piece_mask.shape
 
-            boardSlice = self.space[row:row+pieceRows, col:col+pieceCols]
-            if boardSlice.shape != piece_mask.shape:
-                continue # this shape & orientation extends past the board edges, skip
+            board_slice = self.space[row:row+piece_rows, col:col+piece_cols]
+            if board_slice.shape != piece_mask.shape:
+                # this shape & orientation extends past the board edges, skip
+                continue
+            board_mask = (board_slice == 0) # array of booleans where True is an empty space
 
-            boardSliceMask = (boardSlice == 0) # array of booleans where True is an empty space
-            if np.array_equal(boardSliceMask & piece_mask, piece_mask):
-                # intersection of empty spaces & piece shape results in the piece shape, it means we can fit it in!
+            # If boolean "AND" operation of empty spaces & piece mask results
+            # in the piece mask, it means we can fit it in!
+            if np.array_equal(board_mask & piece_mask, piece_mask):
                 return mask_index
         return None # does not fit
 
-
     def place_piece(self, row, col, piece, orientation=0):
+
         piece_mask = piece.mask[orientation]
         piece_rows, piece_cols = piece_mask.shape
         board_slice = self.space[row:row+piece_rows, col:col+piece_cols]
         add_slice = piece_mask * piece.uid
-        board_slice[:] += add_slice # we want to replace the range, not update reference to point to addSlice
+        board_slice[:] += add_slice  # replace the range
 
-    def recursiveSolve(self, remaining, limit = 1):
+    def recursiveSolve(self, remaining, limit=1):
+
         piece = remaining[0]
         for row in range(6):
             for col in range(6): 
                 orientation = self.piece_fits_at_space(row, col, piece)
-                if orientation != None:
-                    newBoard = Board(self.context, self)
-                    newBoard.place_piece(row, col, piece, orientation)
-                    newRemaining = remaining.copy()
-                    newRemaining.remove(piece)
+                if orientation is not None:
+                    new_board = Board(self.context, self)
+                    new_board.place_piece(row, col, piece, orientation)
+                    new_remaining = remaining.copy()
+                    new_remaining.remove(piece)
 
-                    if newBoard.isSolved():
+                    if new_board.isSolved():
                         self.context.solution_ts.append(time.process_time() - self.context.start_ts)
                         
                         print('Found a solution after {:.2f} seconds'.format(time.process_time() - self.context.start_ts))
-                        newBoard.drawToConsole()
+                        new_board.drawToConsole()
                         if PLOT_SOLUTIONS:
-                            newBoard.draw()
+                            new_board.draw()
                         return (len(self.context.solution_ts) >= limit)
 
-                    if not newRemaining:  # No remaining pieces we can place!
+                    if not new_remaining:  # No remaining pieces we can place!
                         return False      # Jump back to shallower recursion depth
 
-                    solutionFound = newBoard.recursiveSolve(newRemaining, limit)
-                    if solutionFound and (len(self.context.solution_ts) >= limit):
+                    solution_found = new_board.recursiveSolve(new_remaining, limit)
+                    if solution_found and (len(self.context.solution_ts) >= limit):
                         return True #exit out of the recursion
         return False # cannot solve at this depth
+
 
 class GameContext:
 
     def __init__(self):
-        
-        self.start_ts = time.process_time()  # Note: will be overridden during Solve()
+
+        self.start_ts = 0
         self.solution_ts = []
 
+        # This feels really messy. Is there a better way to do this?
         self.all_pieces = []
         self.all_pieces.append(GamePiece('Blocker', 99, [0.6, 0.4, 0.05], False, False, [[True]]))
         self.all_pieces.append(GamePiece('Blue', 1, [0,0,1.0], False, False, [[True]]))
@@ -189,46 +186,44 @@ class GameContext:
         self.all_pieces.append(GamePiece('Purple', 9, [0.5,0,0.5], True, False, [[True, True],
                                                                         [True, False]]))
         self.piece_colors = {x.uid: x.color for x in self.all_pieces}
-
         self.play_pieces = self.all_pieces[1:]  # all pieces except the Blocker are available to play
         
         self.board = Board(self)
 
         if PLOT_SOLUTIONS:
-            
-            self.plot_fig, self.plot_ax = plt.subplots(1, 2, figsize=(10,5))
-            # configure axes for Square
+            self.plot_fig, self.plot_ax = plt.subplots(1, 2, figsize=(10, 5))
+            # configure axes for Square board plot
             self.plot_ax[0].xaxis.tick_top()
             self.plot_ax[0].set_xticks(np.arange(6))
             self.plot_ax[0].set_yticks(np.arange(6))
             self.plot_ax[0].set_xticklabels(COL_LABELS)
             self.plot_ax[0].set_yticklabels(ROW_LABELS)
 
-            # configure axes for Line
+            # configure axes for Line plot
             self.plot_ax[1].set_xlabel('Seconds')
             self.plot_ax[1].set_ylabel('Solutions')
             self.plot_ax[1].xaxis.get_major_locator().set_params(integer=True)
             self.plot_ax[1].yaxis.get_major_locator().set_params(integer=True)
-            self.plot_ln, = self.plot_ax[1].plot([0],[0],'r-')
+            self.plot_ln, = self.plot_ax[1].plot([0], [0], 'r-')
             self.plot_fig.tight_layout()
 
             plt.ion()
             plt.show()
 
-
-
     def roll_dice(self):
-        # Roll each dice and place a blocker piece on the board
+
         print("Rolling dice...")
         dice_result_output = ' '
         for d in DEFAULT_DICE:
+            # Create & roll each dice and place a blocker piece on the board
             dice = Dice(d)
             face, (row, col) = dice.roll()
             dice_result_output += face + ' '
-            self.board.place_piece(row, col, self.all_pieces[0])  # place the blocker pieces
+            self.board.place_piece(row, col, self.all_pieces[0])
         print(dice_result_output + '\n')
 
     def solve(self, limit):
+
         self.start_ts = time.process_time()
         self.board.recursiveSolve(self.play_pieces, limit)
         if limit > 1:
@@ -236,8 +231,7 @@ class GameContext:
                 len(self.solution_ts), time.process_time() - self.start_ts))
         if PLOT_SOLUTIONS:
             plt.ioff()
-            plt.show() #keeps program running until the plot is closed
-            
+            plt.show()  # keeps program running until the plot is closed
 
 
 def main():
@@ -248,14 +242,14 @@ def main():
     game.board.draw()
 
     print('Using following stategy:')
-    strategic_sort = [4, 5, 6, 7, 8, 9, 3, 2, 1]  # Grey, Red, Yellow, Cyan, Green, Purple, Orange, Brown, Blue
+    strategic_sort = [4, 5, 6, 7, 8, 9, 3, 2, 1]
+    # Grey, Red, Yellow, Cyan, Green, Purple, Orange, Brown, Blue
     game.play_pieces.sort(key=lambda x: strategic_sort.index(x.uid))
-    print(', '.join([str(x.uid) + '-' + x.name for x in game.play_pieces]) + '\n')
+    print(', '.join([str(x.uid) + '-' + x.name for x in game.play_pieces]))
 
     print('Attempting to find {} solutions...'.format(SOLUTION_LIMIT))
     game.solve(SOLUTION_LIMIT)
-    
 
 
-if __name__ == "__main__": 
-    main() 
+if __name__ == "__main__":
+    main()
