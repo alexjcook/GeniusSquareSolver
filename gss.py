@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-SOLUTION_LIMIT = 2  # stop after finding this many solutions
+SOLUTION_LIMIT = 20  # stop after finding this many solutions
 PLOT_SOLUTIONS = True
 ROW_LABELS = list('ABCDEF')
 COL_LABELS = list(map(str, range(1, 7)))
@@ -64,8 +64,8 @@ class Dice:
 
 class Board:
 
-    def __init__(self, game_context, from_existing_board=None):
-        self.game_context = game_context
+    def __init__(self, context, from_existing_board=None):
+        self.context = context
         if from_existing_board is None:
             self.space = np.zeros((6, 6), np.int8)
             self.depth = 0
@@ -75,25 +75,30 @@ class Board:
 
     def draw(self):
 
+        fig = self.context.plot_fig
+        ax_sq = self.context.plot_ax[0]
+        ax_ln = self.context.plot_ax[1]
+
         color_data = np.ones((6, 6, 3))
-        fig, ax = plt.subplots()
+        
 
         for row, row_val in enumerate(self.space):
             for col, col_val in enumerate(row_val):
                 if col_val == 99:  # blocker piece
-                    color = self.game_context.all_pieces[0].color
+                    color = self.context.all_pieces[0].color
                     circ = plt.Circle((col, row), radius=0.45, color=color)
-                    ax.add_patch(circ)
+                    ax_sq.add_patch(circ)
                 elif col_val > 0:
-                    color_data[row, col] = self.game_context.piece_colors.get(col_val, [0, 0, 0])
+                    color_data[row, col] = self.context.piece_colors.get(col_val, [0, 0, 0])
 
-        ax.imshow(color_data)
-        ax.xaxis.tick_top()
-        ax.set_xticks(np.arange(6))
-        ax.set_yticks(np.arange(6))
-        ax.set_xticklabels(COL_LABELS)
-        ax.set_yticklabels(ROW_LABELS)
-        plt.draw()
+        ax_sq.imshow(color_data)
+
+        x = [0] + self.context.solution_ts
+        y = range(len(self.context.solution_ts)+1)
+        self.context.plot_ln.set_xdata(x)
+        self.context.plot_ln.set_ydata(y)
+        ax_ln.set_xlim([0,max(10,time.process_time())])
+        ax_ln.set_ylim([0,SOLUTION_LIMIT])
         plt.pause(0.001)  # show plot and allow processing to continue
 
     def drawToConsole(self):
@@ -138,33 +143,34 @@ class Board:
             for col in range(6): 
                 orientation = self.piece_fits_at_space(row, col, piece)
                 if orientation != None:
-                    newBoard = Board(self.game_context, self)
+                    newBoard = Board(self.context, self)
                     newBoard.place_piece(row, col, piece, orientation)
                     newRemaining = remaining.copy()
                     newRemaining.remove(piece)
 
                     if newBoard.isSolved():
+                        self.context.solution_ts.append(time.process_time() - self.context.start_ts)
                         
-                        self.game_context.nbr_solutions_found += 1
-                        print('Found a solution in {:.2f} seconds'.format(time.process_time() - self.game_context.start_time))
+                        print('Found a solution after {:.2f} seconds'.format(time.process_time() - self.context.start_ts))
                         newBoard.drawToConsole()
                         if PLOT_SOLUTIONS:
                             newBoard.draw()
-                        return (self.game_context.nbr_solutions_found >= limit)
+                        return (len(self.context.solution_ts) >= limit)
 
                     if not newRemaining:  # No remaining pieces we can place!
                         return False      # Jump back to shallower recursion depth
 
                     solutionFound = newBoard.recursiveSolve(newRemaining, limit)
-                    if solutionFound and (self.game_context.nbr_solutions_found >= limit):
+                    if solutionFound and (len(self.context.solution_ts) >= limit):
                         return True #exit out of the recursion
         return False # cannot solve at this depth
 
 class GameContext:
 
     def __init__(self):
-        self.nbr_solutions_found = 0
-        self.start_time = time.process_time()  # Note: will be overridden during Solve()
+        
+        self.start_ts = time.process_time()  # Note: will be overridden during Solve()
+        self.solution_ts = []
 
         self.all_pieces = []
         self.all_pieces.append(GamePiece('Blocker', 99, [0.6, 0.4, 0.05], False, False, [[True]]))
@@ -188,6 +194,28 @@ class GameContext:
         
         self.board = Board(self)
 
+        if PLOT_SOLUTIONS:
+            
+            self.plot_fig, self.plot_ax = plt.subplots(1, 2, figsize=(10,5))
+            # configure axes for Square
+            self.plot_ax[0].xaxis.tick_top()
+            self.plot_ax[0].set_xticks(np.arange(6))
+            self.plot_ax[0].set_yticks(np.arange(6))
+            self.plot_ax[0].set_xticklabels(COL_LABELS)
+            self.plot_ax[0].set_yticklabels(ROW_LABELS)
+
+            # configure axes for Line
+            self.plot_ax[1].set_xlabel('Seconds')
+            self.plot_ax[1].set_ylabel('Solutions')
+            self.plot_ax[1].xaxis.get_major_locator().set_params(integer=True)
+            self.plot_ax[1].yaxis.get_major_locator().set_params(integer=True)
+            self.plot_ln, = self.plot_ax[1].plot([0],[0],'r-')
+            self.plot_fig.tight_layout()
+
+            plt.ion()
+            plt.show()
+
+
 
     def roll_dice(self):
         # Roll each dice and place a blocker piece on the board
@@ -201,11 +229,11 @@ class GameContext:
         print(dice_result_output + '\n')
 
     def solve(self, limit):
-        self.start_time = time.process_time()
+        self.start_ts = time.process_time()
         self.board.recursiveSolve(self.play_pieces, limit)
         if limit > 1:
             print('Found a total of {} solutions in {:.2f} seconds'.format(
-                self.nbr_solutions_found, time.process_time() - self.start_time))
+                len(self.solution_ts), time.process_time() - self.start_ts))
         if PLOT_SOLUTIONS:
             plt.show() #keeps program running until the plot is closed
 
@@ -215,6 +243,7 @@ def main():
     game = GameContext()
     game.roll_dice()
     game.board.drawToConsole()
+    game.board.draw()
 
     print('Using following stategy:')
     strategic_sort = [4, 5, 6, 7, 8, 9, 3, 2, 1]  # Grey, Red, Yellow, Cyan, Green, Purple, Orange, Brown, Blue
