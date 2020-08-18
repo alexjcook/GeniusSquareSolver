@@ -155,8 +155,8 @@ class Board:
                     if not new_remaining:  # No remaining pieces we can place!
                         return False      # Jump back to shallower recursion depth
 
-                    solution_found = new_board.recursiveSolve(new_remaining, limit)
-                    if solution_found and (len(self.context.solution_ts) >= limit):
+                    hit_limit = new_board.recursiveSolve(new_remaining, limit)
+                    if hit_limit:  # and (len(self.context.solution_ts) >= limit):
                         return True #exit out of the recursion
         return False # cannot solve at this depth
 
@@ -222,16 +222,28 @@ class GameContext:
             self.board.place_piece(row, col, self.all_pieces[0])
         print(dice_result_output + '\n')
 
-    def solve(self, limit):
+    def solve(self, limit, strategic_sort):
+
+        self.play_pieces.sort(key=lambda x: strategic_sort.index(x.uid))
+        sort_string = [str(x.uid) + '-' + x.name for x in self.play_pieces]
+
+        out = 'Attempting to find {} solutions '.format(limit)
+        out += 'using the following sort strategy:\n'
+        out += ', '.join(sort_string) + '\n'
+        print(out)
 
         self.start_ts = time.process_time()
-        self.board.recursiveSolve(self.play_pieces, limit)
+        hit_limit = self.board.recursiveSolve(self.play_pieces, limit)
+        duration = time.process_time() - self.start_ts
         if limit > 1:
-            print('Found a total of {} solutions in {:.2f} seconds'.format(
-                len(self.solution_ts), time.process_time() - self.start_ts))
-        if PLOT_SOLUTIONS:
-            plt.ioff()
-            plt.show()  # keeps program running until the plot is closed
+            if hit_limit:
+                print('Hit limit of {} solutions in {:.2f} seconds'.format(
+                    len(self.solution_ts), duration))
+            else:
+                print('Found a total of {} solutions in {:.2f} seconds'.format(
+                    len(self.solution_ts), duration))
+
+
 
 
 def main():
@@ -239,16 +251,18 @@ def main():
     game = GameContext()
     game.roll_dice()
     game.board.drawToConsole()
-    game.board.draw()
+    if PLOT_SOLUTIONS:
+        game.board.draw()
 
-    print('Using following stategy:')
     strategic_sort = [4, 5, 6, 7, 8, 9, 3, 2, 1]
     # Grey, Red, Yellow, Cyan, Green, Purple, Orange, Brown, Blue
-    game.play_pieces.sort(key=lambda x: strategic_sort.index(x.uid))
-    print(', '.join([str(x.uid) + '-' + x.name for x in game.play_pieces]))
+    
+    game.solve(SOLUTION_LIMIT, strategic_sort)
 
-    print('Attempting to find {} solutions...'.format(SOLUTION_LIMIT))
-    game.solve(SOLUTION_LIMIT)
+    if PLOT_SOLUTIONS:
+        print('Finished. Close plot window to exit.')
+        plt.ioff()
+        plt.show()  # keeps program running until the plot is closed
 
 
 if __name__ == "__main__":
