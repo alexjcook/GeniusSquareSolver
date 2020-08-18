@@ -97,8 +97,8 @@ class Board:
         y = range(len(self.context.solution_ts)+1)
         self.context.plot_ln.set_xdata(x)
         self.context.plot_ln.set_ydata(y)
-        ax_ln.set_xlim([0,max(10,time.process_time())])
-        ax_ln.set_ylim([0,SOLUTION_LIMIT])
+        ax_ln.set_xlim([0, max(10, time.process_time())])
+        ax_ln.set_ylim([0, SOLUTION_LIMIT + 1])
         plt.pause(0.001)  # show plot and allow processing to continue
 
     def drawToConsole(self):
@@ -235,7 +235,9 @@ class GameContext:
             print('Found a total of {} solutions in {:.2f} seconds'.format(
                 len(self.solution_ts), time.process_time() - self.start_ts))
         if PLOT_SOLUTIONS:
+            plt.ioff()
             plt.show() #keeps program running until the plot is closed
+            
 
 
 def main():
