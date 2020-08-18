@@ -23,23 +23,27 @@ DEFAULT_DICE = [
 
 class GamePiece:
 
-    def __init__(self, name, uid, color,
-                 check_rotated, check_flipped, mask):
+    def __init__(self, name, uid, color, mask):
 
         self.name = name
         self.uid = uid
         self.color = color
         self.mask = []
 
-        flips = [0, 1] if check_flipped else [0]
-        rotations = [0, 1, 2, 3] if check_rotated else [0]
-
-        for flip in flips:
-            for rotation in rotations:
+        for flip in [True, False]:
+            for rotation in [0, 1, 2, 3]:
                 new_mask = np.array(mask)
                 new_mask = np.fliplr(new_mask) if flip else new_mask
                 new_mask = np.rot90(new_mask, rotation)
-                self.mask.append(new_mask)
+
+                if not self.mask_exists(new_mask):
+                    self.mask.append(new_mask)
+
+    def mask_exists(self, new_mask):
+        for m in self.mask:
+            if np.array_equal(m, new_mask):
+                return True
+        return False
 
 
 class Dice:
@@ -170,20 +174,20 @@ class GameContext:
 
         # This feels really messy. Is there a better way to do this?
         self.all_pieces = []
-        self.all_pieces.append(GamePiece('Blocker', 99, [0.6, 0.4, 0.05], False, False, [[True]]))
-        self.all_pieces.append(GamePiece('Blue', 1, [0,0,1.0], False, False, [[True]]))
-        self.all_pieces.append(GamePiece('Brown', 2, [0.5,0.3,0.3], True, False, [[True, True]]))
-        self.all_pieces.append(GamePiece('Orange', 3, [1.0,0.4,0], True, False, [[True, True, True]]))
-        self.all_pieces.append(GamePiece('Grey', 4, [0.5,0.5,0.5], True, False, [[True, True, True, True]]))
-        self.all_pieces.append(GamePiece('Red', 5, [1.0,0,0], True, True, [[False, True, True],
+        self.all_pieces.append(GamePiece('Blocker', 99, [0.6, 0.4, 0.05], [[True]]))
+        self.all_pieces.append(GamePiece('Blue', 1, [0,0,1.0], [[True]]))
+        self.all_pieces.append(GamePiece('Brown', 2, [0.5,0.3,0.3], [[True, True]]))
+        self.all_pieces.append(GamePiece('Orange', 3, [1.0,0.4,0], [[True, True, True]]))
+        self.all_pieces.append(GamePiece('Grey', 4, [0.5,0.5,0.5], [[True, True, True, True]]))
+        self.all_pieces.append(GamePiece('Red', 5, [1.0,0,0], [[False, True, True],
                                                                 [True, True, False]]))
-        self.all_pieces.append(GamePiece('Yellow', 6, [1.0,0.7,0], True, False,[[True, True, True],
+        self.all_pieces.append(GamePiece('Yellow', 6, [1.0,0.7,0], [[True, True, True],
                                                                     [False, True, False]]))
-        self.all_pieces.append(GamePiece('Cyan', 7, [0.2,0.5,1.0], True, True, [[True, True, True],
+        self.all_pieces.append(GamePiece('Cyan', 7, [0.2,0.5,1.0], [[True, True, True],
                                                                     [True, False, False]]))
-        self.all_pieces.append(GamePiece('Green', 8, [0,1.0,0], False, False, [[True, True],
+        self.all_pieces.append(GamePiece('Green', 8, [0,1.0,0], [[True, True],
                                                                     [True, True]]))
-        self.all_pieces.append(GamePiece('Purple', 9, [0.5,0,0.5], True, False, [[True, True],
+        self.all_pieces.append(GamePiece('Purple', 9, [0.5,0,0.5], [[True, True],
                                                                         [True, False]]))
         self.piece_colors = {x.uid: x.color for x in self.all_pieces}
         self.play_pieces = self.all_pieces[1:]  # all pieces except the Blocker are available to play
