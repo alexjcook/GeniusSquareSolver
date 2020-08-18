@@ -1,6 +1,6 @@
 # GeniusSquareSolver
 Finds solutions to the board game _The Genius Square_.
-![Screenshot of program output](screenshot.png)
+![Screenshot of program output](screenshot.gif)
 
 
 ## What is The Genius Square?
