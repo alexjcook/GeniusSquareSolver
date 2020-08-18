@@ -4,12 +4,14 @@ Finds solutions to the board game _The Genius Square_.
 
 
 ## What is The Genius Square?
-The Genius Square is a fun puzzle game, you should buy a copy!
+The Genius Square is a fun puzzle game, which you should buy if you haven't already! 
+
+You can read more about it at [Board Game Geek](https://boardgamegeek.com/boardgame/273065/genius-square).
 
 ![Image of The Genius Square board game](https://www.happypuzzle.co.uk/uploads/productimages/medium/GENIUS.jpg)
 
 ## How is it played?
-7 dice are rolled, each one corresponding to a location on the board. A 'blocker' piece is placed at each location on the board. The player then has to fit all the remaining coloured play pieces onto the board.
+Seven dice are rolled, each face corresponding to a location on the board. A 'blocker' piece is placed at each location. The player then has to fill the remaining spaces on the board with the coloured play pieces! Players can play solo or take on an opponent head-to-head.
 
 
 ## What is the purpose of this project?
