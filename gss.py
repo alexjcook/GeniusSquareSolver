@@ -250,9 +250,9 @@ def main():
     print('Using following stategy:')
     strategic_sort = [4, 5, 6, 7, 8, 9, 3, 2, 1]  # Grey, Red, Yellow, Cyan, Green, Purple, Orange, Brown, Blue
     game.play_pieces.sort(key=lambda x: strategic_sort.index(x.uid))
-    print(', '.join([x.name for x in game.play_pieces]) + '\n')
+    print(', '.join([str(x.uid) + '-' + x.name for x in game.play_pieces]) + '\n')
 
-    print('Solving...')
+    print('Attempting to find {} solutions...'.format(SOLUTION_LIMIT))
     game.solve(SOLUTION_LIMIT)
     
 
