@@ -6,8 +6,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-SOLUTION_LIMIT = 20  # stop after finding this many solutions
+SOLUTION_LIMIT = 10  # stop after finding this many solutions
 PLOT_SOLUTIONS = True  # Use Matplotlib to draw board and line plot
+CONTINUOUS_DRAW = False  # continuously draw while solving (slow!!)
 ROW_LABELS = list('ABCDEF')
 COL_LABELS = list(map(str, range(1, 7)))
 
@@ -140,14 +141,10 @@ class Board:
         color_data = np.ones((6, 6, 3))
         for row, row_val in enumerate(self.space):
             for col, col_val in enumerate(row_val):
-                if col_val == 99:  # blocker piece
-                    color = self.context.all_pieces[0].color
-                    circ = plt.Circle((col, row), radius=0.45, color=color)
-                    ax_sq.add_patch(circ)
-                elif col_val > 0:
-                    color = self.context.piece_colors.get(col_val, [0, 0, 0])
+                if col_val > 0 and col_val < 99:  # not a blocker piece
+                    color = self.context.piece_colors.get(col_val, [1, 1, 1])
                     color_data[row, col] = color
-        ax_sq.imshow(color_data)
+        self.context.plot_im.set_data(color_data)
 
         # update line plot
         x = [0] + self.context.solution_ts
@@ -261,6 +258,8 @@ class Board:
                 if orientation is not None:
                     new_board = Board(self.context, self)
                     new_board.place_piece(row, col, piece, orientation)
+                    if CONTINUOUS_DRAW:
+                        new_board.draw()
                     new_remaining = remaining.copy()
                     new_remaining.remove(piece)
 
@@ -272,6 +271,8 @@ class Board:
                         new_board.draw_to_console()
                         if PLOT_SOLUTIONS:
                             new_board.draw()
+                            if CONTINUOUS_DRAW:
+                                time.sleep(1)
                         return (len(self.context.solution_ts) >= limit)
 
                     if not new_remaining:
@@ -336,6 +337,8 @@ class GameContext:
             self.plot_ax[0].set_yticks(np.arange(6))
             self.plot_ax[0].set_xticklabels(COL_LABELS)
             self.plot_ax[0].set_yticklabels(ROW_LABELS)
+            blank_data = np.ones((6, 6, 3))
+            self.plot_im = self.plot_ax[0].imshow(blank_data)
 
             # configure Line plot
             self.plot_ax[1].set_xlabel('Seconds')
@@ -350,7 +353,7 @@ class GameContext:
 
     def roll_dice(self):
         """
-        Simulate rolling the dice and place the blocker pieces on the board.
+        Simulate rolling the dice
         """
         print("Rolling dice...")
         dice_result_output = ' '
@@ -359,7 +362,21 @@ class GameContext:
             face, (row, col) = dice.roll()  # get a random face from the die
             dice_result_output += face + ' '
             self.board.place_piece(row, col, self.all_pieces[0])
+            self.draw_blocker(row, col)
         print(dice_result_output + '\n')
+
+    def draw_blocker(self, row, col):
+        """
+        Draw a blocker on the board at the given row & column.
+
+        Args:
+            row (int): Board row index at which to place piece.
+            col (int): Board column index at whcih to place piece.
+        """
+        if PLOT_SOLUTIONS:
+            color = self.all_pieces[0].color
+            circ = plt.Circle((col, row), radius=0.45, color=color)
+            self.plot_ax[0].add_patch(circ)
 
     def solve(self, limit, strategic_sort):
         """
