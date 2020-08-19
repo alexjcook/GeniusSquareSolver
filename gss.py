@@ -7,9 +7,12 @@ import matplotlib.pyplot as plt
 
 
 SOLUTION_LIMIT = 20  # stop after finding this many solutions
-PLOT_SOLUTIONS = True
+PLOT_SOLUTIONS = True  # Use Matplotlib to draw board and line plot
 ROW_LABELS = list('ABCDEF')
 COL_LABELS = list(map(str, range(1, 7)))
+
+# The Genius Square uses a special set of dice, which means
+# only certain roll combinations are possible.
 DEFAULT_DICE = [
     'A1 F3 D1 E2 D2 C1',
     'A2 A3 B1 B2 C2 B3',
@@ -22,8 +25,22 @@ DEFAULT_DICE = [
 
 
 class GamePiece:
+    """
+    A class to represent game pieces that can be placed on the board.
+    i.e. blocker pieces and coloured game pieces.
+    """
 
     def __init__(self, name, uid, color, mask):
+        """
+        Initialise game piece and precompute a mask for all possible
+        orientations of that piece (by flipping and rotating).
+
+        Args:
+            name (str): Descriptive name of the game piece.
+            uid (int): Unique id to fill board spaces when piece is placed.
+            color (list of float): Color in [R,G,B] as a percentage (0.0-1.0).
+            mask (2D list of bool): Array representing shape of game piece.
+        """
 
         self.name = name
         self.uid = uid
@@ -40,6 +57,17 @@ class GamePiece:
                     self.mask.append(new_mask)
 
     def mask_exists(self, new_mask):
+        """
+        Determines if the given mask is identical to any existing generated
+        mask for this game piece.
+
+        Args:
+            new_mask (Numpy ndarray): new mask for comparison
+
+        Returns:
+            True if given mask is identical to any existing mask, False
+            otherwise.
+        """
         for m in self.mask:
             if np.array_equal(m, new_mask):
                 return True
@@ -47,14 +75,28 @@ class GamePiece:
 
 
 class Dice:
+    """
+    A class to represent a singular die, but Dice sounds nicer!
+    """
 
     def __init__(self, faces):
+        """
+        Initialise the die and populate list of die faces.
 
+        Args:
+            faces (str): Space delimited list of faces (eg. "A1 B3 E2 ...")
+        """
         faces_as_list = faces.split(' ')
         self.faces = faces_as_list
 
     def roll(self):
+        """
+        Simulate a roll of the die by randomly choosing a face.
 
+        Returns:
+            Die face as string and a tuple of board indices
+            (row: int, column: int) corresponding to the die face.
+        """
         random_face_index = random.randrange(len(self.faces))
         face = self.faces[random_face_index]
         row = ROW_LABELS.index(face[0])
@@ -63,17 +105,35 @@ class Dice:
 
 
 class Board:
+    """
+    A class to represent the state of the game board, with any number of pieces
+    already placed on the board.
+    """
 
     def __init__(self, context, from_existing_board=None):
+        """
+        Initialise the board, then populate all spaces as empty, or copied
+        from an existing board if provided.
+
+        Args:
+            context (GameContext): Game context to associate with this board.
+            from_existing_board (Board, optional): An existing Board from which
+                the new Board will be populated from. If None, new
+                Board will be empty. Defaults to None.
+        """
+
         self.context = context
         if from_existing_board is None:
             self.space = np.zeros((6, 6), np.int8)
-            self.depth = 0
         else:
             self.space = from_existing_board.space.copy()
-            self.depth = from_existing_board.depth + 1
 
     def draw(self):
+        """
+        Uses Matplotlib to displays a visual representation of the board, along
+        with a line plot of the number of solutions discovered (using the
+        board's GameContext).
+        """
 
         # update board image
         ax_sq = self.context.plot_ax[0]
@@ -97,7 +157,9 @@ class Board:
         self.context.plot_ax[1].set_ylim([0, SOLUTION_LIMIT + 1])
         plt.pause(0.001)  # show plot and allow processing to continue
 
-    def drawToConsole(self):
+    def draw_to_console(self):
+        """Prints visual representation of the board."""
+
         output = "    "
         output += "  ".join(COL_LABELS) + "\n"
         for row_index, row in enumerate(self.space):
@@ -106,40 +168,95 @@ class Board:
             output += '\n'
         print(output)
 
-    def isSolved(self):
+    def is_solved(self):
+        """
+        Checks if the Board has been solved by counting the number of empty
+        spaces.
+
+        Returns:
+            True if there are no empty spaces, otherwise False.
+        """
         empty_spaces = self.space[self.space == 0]
         solved = (empty_spaces.size == 0)
         return solved
 
     def piece_fits_at_space(self, row, col, piece):
+        """
+        Checks if a GamePiece can fit on the Board at the given row & column,
+        by iterating through each of the piece's orientation masks. The top-
+        left of the piece mask will be used as the origin.
+
+        Args:
+            row (int): Board row index at which to check.
+            col (int): Board column index at which to check.
+            piece (GamePiece): the GamePiece to check.
+
+        Returns:
+            index to the GamePiece's mask for the first orientation that
+        will fit on the Board. If none fit, return None.
+        """
+
         for mask_index, piece_mask in enumerate(piece.mask):
             piece_rows, piece_cols = piece_mask.shape
 
+            # Get the slice of the board where the piece will be placed
             board_slice = self.space[row:row+piece_rows, col:col+piece_cols]
+
             if board_slice.shape != piece_mask.shape:
-                # this shape & orientation extends past the board edges, skip
+                # the size of the resulting board slice and the size of the
+                # piece don't match up, which means the piece extended past the
+                # edge of the board.
                 continue
-            board_mask = (board_slice == 0) # array of booleans where True is an empty space
+
+            # Create a mask of the board slice where True is an empty space
+            board_mask = (board_slice == 0)
 
             # If boolean "AND" operation of empty spaces & piece mask results
             # in the piece mask, it means we can fit it in!
             if np.array_equal(board_mask & piece_mask, piece_mask):
                 return mask_index
-        return None # does not fit
+
+        return None  # does not fit
 
     def place_piece(self, row, col, piece, orientation=0):
+        """
+        Place a GamePiece on the board at the given row & column. The top-left
+        of the piece will be used as the origin.
 
+        Args:
+            row (int): Board row index at which to place piece.
+            col (int): Board column index at whcih to place piece.
+            piece (GamePiece): the GamePiece to place.
+            orientation (int): the index of the GamePiece's orientation mask to
+                use when placing the piece. Default to 0.
+        """
         piece_mask = piece.mask[orientation]
         piece_rows, piece_cols = piece_mask.shape
         board_slice = self.space[row:row+piece_rows, col:col+piece_cols]
         add_slice = piece_mask * piece.uid
         board_slice[:] += add_slice  # replace the range
 
-    def recursiveSolve(self, remaining, limit=1):
+    def recursive_solve(self, remaining, limit=1):
+        """
+        Recursive function to iterate through all board spaces and remaining
+        pieces, to check if any will fit on the board. If a piece can fit, a
+        copy of the board and remaining piece list is made, and the piece is
+        placed on the copy. The board copy is checked to see if it has been
+        solved, and if not, this function is called on the copy.
 
+        Args:
+            remaining (list of GamePiece): List of pieces available to place.
+            limit (int): the number of solutions to find. Default to 1.
+
+        Returns:
+            True if a solution was found and the limit was reached, or if
+            the limit had already been reached in a deeper call to this
+            function. Otherwise False, when all pieces have been used or when
+            all spaces have been checked and no pieces fit.
+        """
         piece = remaining[0]
         for row in range(6):
-            for col in range(6): 
+            for col in range(6):
                 orientation = self.piece_fits_at_space(row, col, piece)
                 if orientation is not None:
                     new_board = Board(self.context, self)
@@ -147,32 +264,42 @@ class Board:
                     new_remaining = remaining.copy()
                     new_remaining.remove(piece)
 
-                    if new_board.isSolved():
-                        self.context.solution_ts.append(time.process_time() - self.context.start_ts)
-                        
-                        print('Found a solution after {:.2f} seconds'.format(time.process_time() - self.context.start_ts))
-                        new_board.drawToConsole()
+                    if new_board.is_solved():
+                        duration = time.process_time() - self.context.start_ts
+                        self.context.solution_ts.append(duration)
+
+                        print('Found a solution after {:.2f} seconds'.format(duration))
+                        new_board.draw_to_console()
                         if PLOT_SOLUTIONS:
                             new_board.draw()
                         return (len(self.context.solution_ts) >= limit)
 
-                    if not new_remaining:  # No remaining pieces we can place!
-                        return False      # Jump back to shallower recursion depth
+                    if not new_remaining:
+                        return False  # No remaining pieces to place!
 
-                    hit_limit = new_board.recursiveSolve(new_remaining, limit)
-                    if hit_limit:  # and (len(self.context.solution_ts) >= limit):
-                        return True #exit out of the recursion
-        return False # cannot solve at this depth
+                    hit_limit = new_board.recursive_solve(new_remaining, limit)
+                    if hit_limit:  # Limit reached in a deeper call
+                        return True  # Quickly exit out of the recursion
+        # cannot solve at this depth, no pieces fit
+        return False
 
 
 class GameContext:
+    """
+    A class to represent the game state and bring together all the objects
+    needed to play. Constructs all game pieces, dice, and initial board.
+    """
 
     def __init__(self):
-
+        """
+        Initialise the GameContext, along with creating all the game pieces,
+        the dice, and the initial board.
+        """
         self.start_ts = 0
         self.solution_ts = []
 
         # This feels really messy. Is there a better way to do this?
+        # Should probably be defined in a JSON file and loaded in.
         self.all_pieces = []
         self.all_pieces.append(GamePiece('Blocker', 99, [0.6, 0.4, 0.05], [[True]]))
         self.all_pieces.append(GamePiece('Blue', 1, [0,0,1.0], [[True]]))
@@ -189,21 +316,28 @@ class GameContext:
                                                                     [True, True]]))
         self.all_pieces.append(GamePiece('Purple', 9, [0.5,0,0.5], [[True, True],
                                                                         [True, False]]))
+
+        # Create a dict of piece:RGB color, this will be used later to
+        # efficiently draw the board
         self.piece_colors = {x.uid: x.color for x in self.all_pieces}
-        self.play_pieces = self.all_pieces[1:]  # all pieces except the Blocker are available to play
-        
+
+        # all pieces except the Blocker are available to play
+        self.play_pieces = self.all_pieces[1:]
+
+        # create the "root" board
         self.board = Board(self)
 
         if PLOT_SOLUTIONS:
+
+            # Get all the Matplotlib stuff configured to draw the board
             self.plot_fig, self.plot_ax = plt.subplots(1, 2, figsize=(10, 5))
-            # configure axes for Square board plot
             self.plot_ax[0].xaxis.tick_top()
             self.plot_ax[0].set_xticks(np.arange(6))
             self.plot_ax[0].set_yticks(np.arange(6))
             self.plot_ax[0].set_xticklabels(COL_LABELS)
             self.plot_ax[0].set_yticklabels(ROW_LABELS)
 
-            # configure axes for Line plot
+            # configure Line plot
             self.plot_ax[1].set_xlabel('Seconds')
             self.plot_ax[1].set_ylabel('Solutions')
             self.plot_ax[1].xaxis.get_major_locator().set_params(integer=True)
@@ -211,23 +345,37 @@ class GameContext:
             self.plot_ln, = self.plot_ax[1].plot([0], [0], 'r-')
             self.plot_fig.tight_layout()
 
-            plt.ion()
-            plt.show()
+            plt.ion()  # Matplotlib interactive mode ON
+            plt.show()  # Show the board & plot
 
     def roll_dice(self):
-
+        """
+        Simulate rolling the dice and place the blocker pieces on the board.
+        """
         print("Rolling dice...")
         dice_result_output = ' '
         for d in DEFAULT_DICE:
-            # Create & roll each dice and place a blocker piece on the board
             dice = Dice(d)
-            face, (row, col) = dice.roll()
+            face, (row, col) = dice.roll()  # get a random face from the die
             dice_result_output += face + ' '
             self.board.place_piece(row, col, self.all_pieces[0])
         print(dice_result_output + '\n')
 
     def solve(self, limit, strategic_sort):
+        """
+        Finds a number of solutions (up to the given limit) for the
+        GameContext's board. Prints a summary of solutions found and the
+        duration.
 
+        Args:
+            limit (int): Number of solutions to find.
+            strategic_sort (list of int): The list of GamePiece uid's (1-9),
+                sorted in the order in which to attempt to place on the board.
+                The most efficient strategy is to place the larger or more
+                complex pieces first.
+        """
+
+        # sort the list of play pieces according to the given strategy
         self.play_pieces.sort(key=lambda x: strategic_sort.index(x.uid))
         sort_string = [str(x.uid) + '-' + x.name for x in self.play_pieces]
 
@@ -237,30 +385,35 @@ class GameContext:
         print(out)
 
         self.start_ts = time.process_time()
-        hit_limit = self.board.recursiveSolve(self.play_pieces, limit)
+
+        # the guts of the action starts here!
+        hit_limit = self.board.recursive_solve(self.play_pieces, limit)
+
         duration = time.process_time() - self.start_ts
+
         if limit > 1:
             if hit_limit:
-                print('Hit limit of {} solutions in {:.2f} seconds'.format(
-                    len(self.solution_ts), duration))
+                print('Hit limit of ', end='')
             else:
-                print('Found a total of {} solutions in {:.2f} seconds'.format(
-                    len(self.solution_ts), duration))
+                print('Found a total of ', end='')
 
-
+            print('{} solutions in {:.2f} seconds'.format(
+                len(self.solution_ts), duration))
 
 
 def main():
-
+    """
+    Create the GameContext, roll the dice, and find solutions.
+    """
     game = GameContext()
     game.roll_dice()
-    game.board.drawToConsole()
+    game.board.draw_to_console()
     if PLOT_SOLUTIONS:
         game.board.draw()
 
     strategic_sort = [4, 5, 6, 7, 8, 9, 3, 2, 1]
     # Grey, Red, Yellow, Cyan, Green, Purple, Orange, Brown, Blue
-    
+
     game.solve(SOLUTION_LIMIT, strategic_sort)
 
     if PLOT_SOLUTIONS:
